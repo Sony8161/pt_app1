@@ -22,9 +22,11 @@ resource "aws_rds_cluster" "this" {
   vpc_security_group_ids          = data.aws_security_groups.this.ids
   enabled_cloudwatch_logs_exports = ["postgresql"]
 
+  # min_capacity 0 lets the cluster pause and costs ~15s on the first request after
+  # idle (longer than CloudFront's origin timeout); 0.5 ACU keeps the demo responsive.
   serverlessv2_scaling_configuration {
     max_capacity = 4.0
-    min_capacity = 0.0
+    min_capacity = 0.5
   }
 
   tags = local.app_tags

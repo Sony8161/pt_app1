@@ -1,0 +1,18 @@
+# bin/start-dev.sh pip-installs the runtime dependencies *into* this folder for
+# LocalStack hot reload, so everything is ignored except the application sources.
+*
+!.gitignore
+!README.md
+!function.py
+!pyproject.toml
+!requirements.txt
+!requirements-dev.txt
+!app/
+!app/**
+!tests/
+!tests/**
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/

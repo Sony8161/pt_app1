@@ -35,16 +35,15 @@ resource "aws_cloudfront_distribution" "this" {
         https_port             = 443
         origin_protocol_policy = "https-only"
         origin_ssl_protocols   = ["TLSv1.2"]
+        # Allow Lambda cold starts + database (re)connects without a CloudFront 504
+        origin_read_timeout = 60
       }
     }
   }
 
-  custom_error_response {
-    error_code            = 404
-    error_caching_min_ttl = 300
-    response_code         = 200
-    response_page_path    = "/index.html"
-  }
+  # NOTE: no distribution-wide custom_error_response (404 -> index.html): it would also
+  # rewrite API errors into HTML. SPA deep links are handled by the viewer-request
+  # function on the default (S3) behavior instead.
 
   # logging_config {
   #   include_cookies = false
@@ -104,6 +103,12 @@ resource "aws_cloudfront_distribution" "this" {
         forward = "none"
       }
     }
+
+    # Serve index.html for extension-less paths so client-side routes survive a refresh
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = element(aws_cloudfront_function.spa_rewrite.*.arn, count.index)
+    }
   }
 
   restrictions {
@@ -117,6 +122,16 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   tags = local.app_tags
+}
+
+# Viewer-request function: rewrites SPA routes (no file extension) to /index.html.
+# API paths are served by their own cache behaviors and never reach this function.
+resource "aws_cloudfront_function" "spa_rewrite" {
+  count   = data.aws_caller_identity.this.id != "000000000000" ? 1 : 0
+  name    = format("%s-spa-rewrite-%s", var.aws_project, local.app_id)
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = file("${path.module}/spa-rewrite.js")
 }
 
 resource "aws_s3_bucket_policy" "this" {

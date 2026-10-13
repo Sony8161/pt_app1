@@ -1,5 +1,5 @@
 locals {
-  app_id = try(trimspace(var.aws_app_code), "") != "" ? trimspace(var.aws_app_code) : random_id.this.hex
+  app_id   = try(trimspace(var.aws_app_code), "") != "" ? trimspace(var.aws_app_code) : random_id.this.hex
   app_tags = { participant = local.app_id, event = random_id.this.hex }
   public_route_table_ids = [
     for rt in data.aws_route_table.this :
@@ -56,7 +56,7 @@ locals {
       runtime          = "python3.13"
       handler          = "function.handler"
       path             = abspath(format("%s/../backend/%s", path.module, name))
-      patterns         = ["!__pycache__/.*", "!\\..*"]
+      patterns         = ["!__pycache__/.*", "!\\..*", "!tests/.*", "!htmlcov/.*"]
       pip_requirements = true
     }
   }
@@ -95,22 +95,26 @@ locals {
     }
   ]
   origin_id = format("%s-s3-origin-%s", var.aws_project, local.app_id)
+  # BOOTSTRAP_ADMIN_PASSWORD is empty on LocalStack (the API then uses its local default); empty values are not injected.
   env_vars = {
-    APP_ID        = local.app_id
-    APP_NAME      = format("%s-%s", var.aws_project, local.app_id)
-    APP_ROLE      = format("arn:%s:iam::%s:role/%s-assume-%s-%s", data.aws_partition.this.partition, data.aws_caller_identity.this.account_id, var.aws_project, data.aws_region.this.region, local.app_id)
-    APP_REGION    = data.aws_region.this.region
-    IS_LOCAL      = data.aws_caller_identity.this.id == "000000000000" ? "true" : "false"
-    POSTGRES_HOST = data.aws_caller_identity.this.id == "000000000000" ? coalesce(try(trimspace(var.aws_postgres_host), ""), "172.17.0.1") : try(one(aws_rds_cluster.this.*.endpoint), "")
-    POSTGRES_PORT = data.aws_caller_identity.this.id == "000000000000" ? "5432" : try(one(aws_rds_cluster.this.*.port), "")
-    POSTGRES_NAME = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : try(one(aws_rds_cluster.this.*.database_name), "")
-    POSTGRES_USER = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : try(one(aws_rds_cluster.this.*.master_username), "")
-    POSTGRES_PASS = data.aws_caller_identity.this.id == "000000000000" ? "postgres123" : try(one(aws_rds_cluster.this.*.master_password), "")
-    MONGO_HOST    = data.aws_caller_identity.this.id == "000000000000" ? coalesce(try(trimspace(var.aws_mongo_host), ""), "172.17.0.1") : try(one(aws_docdb_cluster.this.*.endpoint), "")
-    MONGO_PORT    = data.aws_caller_identity.this.id == "000000000000" ? "27017" : try(one(aws_docdb_cluster.this.*.port), "")
-    MONGO_NAME    = data.aws_caller_identity.this.id == "000000000000" ? "mongo" : try(one(aws_docdb_cluster.this.*.database_name), "")
-    MONGO_USER    = data.aws_caller_identity.this.id == "000000000000" ? "" : try(one(aws_docdb_cluster.this.*.master_username), "")
-    MONGO_PASS    = data.aws_caller_identity.this.id == "000000000000" ? "" : try(one(aws_docdb_cluster.this.*.master_password), "")
+    APP_ID                   = local.app_id
+    APP_NAME                 = format("%s-%s", var.aws_project, local.app_id)
+    APP_ROLE                 = format("arn:%s:iam::%s:role/%s-assume-%s-%s", data.aws_partition.this.partition, data.aws_caller_identity.this.account_id, var.aws_project, data.aws_region.this.region, local.app_id)
+    APP_REGION               = data.aws_region.this.region
+    IS_LOCAL                 = data.aws_caller_identity.this.id == "000000000000" ? "true" : "false"
+    APP_ENV                  = coalesce(try(trimspace(var.app_env), ""), data.aws_caller_identity.this.id == "000000000000" ? "local" : "prod")
+    JWT_SECRET               = random_password.jwt.result
+    BOOTSTRAP_ADMIN_PASSWORD = data.aws_caller_identity.this.id == "000000000000" ? "" : random_password.admin.result
+    POSTGRES_HOST            = data.aws_caller_identity.this.id == "000000000000" ? coalesce(try(trimspace(var.aws_postgres_host), ""), "172.17.0.1") : try(one(aws_rds_cluster.this.*.endpoint), "")
+    POSTGRES_PORT            = data.aws_caller_identity.this.id == "000000000000" ? "5432" : try(one(aws_rds_cluster.this.*.port), "")
+    POSTGRES_NAME            = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : try(one(aws_rds_cluster.this.*.database_name), "")
+    POSTGRES_USER            = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : try(one(aws_rds_cluster.this.*.master_username), "")
+    POSTGRES_PASS            = data.aws_caller_identity.this.id == "000000000000" ? "postgres123" : try(one(aws_rds_cluster.this.*.master_password), "")
+    MONGO_HOST               = data.aws_caller_identity.this.id == "000000000000" ? coalesce(try(trimspace(var.aws_mongo_host), ""), "172.17.0.1") : try(one(aws_docdb_cluster.this.*.endpoint), "")
+    MONGO_PORT               = data.aws_caller_identity.this.id == "000000000000" ? "27017" : try(one(aws_docdb_cluster.this.*.port), "")
+    MONGO_NAME               = data.aws_caller_identity.this.id == "000000000000" ? "mongo" : try(one(aws_docdb_cluster.this.*.database_name), "")
+    MONGO_USER               = data.aws_caller_identity.this.id == "000000000000" ? "" : try(one(aws_docdb_cluster.this.*.master_username), "")
+    MONGO_PASS               = data.aws_caller_identity.this.id == "000000000000" ? "" : try(one(aws_docdb_cluster.this.*.master_password), "")
   }
   lambda_role_arn = format(
     "arn:%s:iam::%s:role/%s-lambda-%s-%s",

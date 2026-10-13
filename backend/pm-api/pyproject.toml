@@ -1,0 +1,32 @@
+[project]
+name = "pm-api"
+version = "0.1.0"
+description = "ACME project-tracking API (FastAPI on AWS Lambda)"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "integration: needs a reachable PostgreSQL (auto-skipped otherwise)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["B008"]  # FastAPI Depends() in defaults
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "E501"]

@@ -16,6 +16,14 @@ variable "aws_app_code" {
   default     = "abcd1234"
 }
 
+# Logical environment name exposed to the API as APP_ENV (e.g. local, qa, prod).
+# Empty means: "local" on LocalStack, "prod" on AWS.
+variable "app_env" {
+  description = "The application environment name (local, qa, prod). Default: derived from target."
+  type        = string
+  default     = ""
+}
+
 variable "aws_ds_ip" {
   description = "The AWS Directory Service ip address."
   type        = string

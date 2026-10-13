@@ -339,8 +339,13 @@ for req in "$PROJECT_ROOT"/backend/*/requirements.txt; do
         continue
     fi
     echo -e "  Installing pip requirements for $(basename "$svc_dir")..."
-    pip install --quiet --target="$svc_dir" -r "$req" 2>/dev/null || true
-    echo "$REQS_HASH" > "$HASH_FILE"
+    # Use the interpreter matching the Lambda runtime (python3.13); bare `pip` may belong
+    # to another Python and would vendor wheels the LocalStack runtime cannot import.
+    if python3 -m pip install --quiet --target="$svc_dir" -r "$req"; then
+        echo "$REQS_HASH" > "$HASH_FILE"
+    else
+        echo -e "  ✗ pip install failed for $(basename "$svc_dir") (will retry on next start)"
+    fi
 done
 
 # Install npm dependencies into each Node.js service directory for hot-reload
@@ -467,7 +472,6 @@ cd "$FRONTEND_DIR"
 # Check if dependencies are installed
 if [ ! -d "node_modules" ]; then
     echo -e "  ⚠ Frontend dependencies not installed, installing..."
-    rm -f package-lock.json
     npm install > /tmp/npm-install.log 2>&1 || {
         echo -e "  ✗ npm install failed"
         tail -n 30 /tmp/npm-install.log | sed 's/^/    /'

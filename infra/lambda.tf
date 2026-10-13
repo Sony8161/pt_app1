@@ -8,7 +8,7 @@ module "lambda" {
   architectures   = [each.value.arch]
   handler         = each.value.handler
   runtime         = each.value.runtime
-  memory_size     = 128
+  memory_size     = 512 # FastAPI cold starts are CPU-bound; 512 MB keeps them under ~1s
   timeout         = 300
   tracing_mode    = "PassThrough"
   build_in_docker = false

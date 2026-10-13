@@ -41,6 +41,12 @@ output "website_url" {
   value       = data.aws_caller_identity.this.id == "000000000000" ? "http://${aws_s3_bucket.this.bucket}.s3-website.localhost.localstack.cloud:4566" : try("https://${one(aws_cloudfront_distribution.this.*.domain_name)}", null)
 }
 
+output "bootstrap_admin_password" {
+  description = "Initial password of the admin1 account (cloud). Change it at first login."
+  value       = data.aws_caller_identity.this.id == "000000000000" ? "ChangeMe123!" : random_password.admin.result
+  sensitive   = true
+}
+
 output "jupyter_url" {
   description = "The URL of the JupyterHub instance"
   value       = data.aws_caller_identity.this.id == "000000000000" ? "http://localhost:8888" : try(one(aws_eks_cluster.this.*.endpoint), null)

@@ -1,0 +1,5 @@
+# Bandit configuration picked up by `bandit -r ./backend` (see .github/workflows/python.actions.yml).
+# Asserts are fine in tests; the two known local-only secret defaults carry inline `# nosec`.
+[bandit]
+skips: B101
+exclude: */tests/*,*/.venv/*,*/htmlcov/*

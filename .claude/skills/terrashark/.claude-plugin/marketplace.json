@@ -1,0 +1,15 @@
+{
+  "name": "terrashark",
+  "description": "Practical Terraform and OpenTofu skill focused on structure, security, testing, and low-hallucination IaC generation.",
+  "owner": {
+    "name": "LukasNiessen"
+  },
+  "plugins": [
+    {
+      "name": "terrashark",
+      "source": "./",
+      "description": "Terraform/OpenTofu Guardrails",
+      "version": "2.3.0"
+    }
+  ]
+}

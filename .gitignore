@@ -256,3 +256,12 @@ tfplan
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# Keep the frontend lockfile for reproducible installs (npm ci in CI)
+!frontend/package-lock.json
+
+# Spartan AI config (contains API keys)
+.spartan/ai.env
+
+# Machine-specific Claude Code permissions
+.claude/settings.local.json
