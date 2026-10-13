@@ -47,7 +47,7 @@ def get_visible(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: u
     if actor.is_manager:
         if row["manager_id"] != actor.id:
             raise NotFoundError("Project not found")
-    elif assignments_repo.get_active(conn, project_id, actor.id) is None:
+    elif not assignments_repo.has_live_on_project(conn, project_id, actor.id):
         raise NotFoundError("Project not found")
     return row
 
@@ -179,13 +179,15 @@ def update_project(
     if "start_date" in fields or "end_date" in fields:
         _check_dates_fit_children(conn, project_id, start, end)
 
-    if "allocated_hours" in fields:
-        planned = milestones_repo.hours_total(conn, project_id)
-        if planned > fields["allocated_hours"]:
-            raise _field_error(
-                "allocated_hours",
-                f"The milestones already plan {planned:g} hours, more than {fields['allocated_hours']:g}",
-            )
+    planned = milestones_repo.plan_totals(conn, project_id)
+    if "allocated_hours" in fields and planned["hours"] > fields["allocated_hours"]:
+        raise _field_error(
+            "allocated_hours", f"The milestones already plan {planned['hours']:g} hours, more than {fields['allocated_hours']:g}"
+        )
+    if "budget_amount" in fields and planned["budget"] > fields["budget_amount"]:
+        raise _field_error(
+            "budget_amount", f"The milestones already budget {planned['budget']:,.2f}, more than {fields['budget_amount']:,.2f}"
+        )
 
     if "name" in fields and fields["name"].lower() != row["name"].lower() and repo.name_taken(
         conn, fields["name"], exclude_id=project_id
@@ -198,17 +200,12 @@ def update_project(
 
 
 def _check_dates_fit_children(conn: psycopg.Connection[Any], project_id: uuid.UUID, start: Any, end: Any) -> None:
-    """New project dates must still contain every milestone and team assignment."""
+    """New project dates must still contain every milestone (people are assigned inside milestones)."""
     m = milestones_repo.bounds(conn, project_id)
-    a = assignments_repo.bounds_for_project(conn, project_id)
     if m["first_start"] and start > m["first_start"]:
         raise _field_error("start_date", f"A milestone starts on {m['first_start']}, before the new start date")
     if m["last_due"] and end < m["last_due"]:
         raise _field_error("end_date", f"A milestone is due on {m['last_due']}, after the new end date")
-    if a["first_start"] and start > a["first_start"]:
-        raise _field_error("start_date", f"A team member starts on {a['first_start']}, before the new start date")
-    if a["last_end"] and end < a["last_end"]:
-        raise _field_error("end_date", f"A team member is assigned until {a['last_end']}, after the new end date")
 
 
 def complete_project(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid.UUID) -> ProjectOut:
@@ -217,7 +214,7 @@ def complete_project(conn: psycopg.Connection[Any], actor: CurrentUser, project_
     if row["status"] != "active":
         raise ConflictError("Only a project that has started can be completed")
     repo.set_status(conn, project_id, "completed", completed_at=dates.now())
-    assignments_repo.release_project(conn, project_id, dates.today())
+    assignments_repo.end_for_project(conn, project_id, dates.today())
     return _reload(conn, actor, project_id)
 
 
@@ -226,7 +223,7 @@ def archive_project(conn: psycopg.Connection[Any], actor: CurrentUser, project_i
     row = get_visible(conn, actor, project_id)
     if row["archived_at"] is None:
         repo.set_status(conn, project_id, "archived", completed_at=row["completed_at"], archived_at=dates.now())
-        assignments_repo.release_project(conn, project_id, dates.today())
+        assignments_repo.end_for_project(conn, project_id, dates.today())
     return _reload(conn, actor, project_id)
 
 

@@ -1,4 +1,4 @@
-"""Dashboards: health, allocation and the personal view."""
+"""Dashboards: health, allocation and the personal view (hours come from the calendar, not from logs)."""
 
 from __future__ import annotations
 
@@ -14,40 +14,43 @@ def test_overview_ranks_projects_by_urgency_and_totals_money(api, today):
     healthy = api.project(manager, name="Healthy", start="2026-03-01", end="2026-06-30", hours=1000, budget=10000)
     late = api.project(manager, name="Late", start="2026-01-01", end="2026-03-01", hours=100, budget=5000)
     soon = api.project(manager, name="Soon", start="2026-03-01", end="2026-06-30", hours=500, budget=20000)
-    api.assign(healthy["id"], busy)
-    api.client.post(f"/projects/{soon['id']}/milestones", json={"name": "Past due", "start_date": "2026-03-02", "due_date": "2026-03-05"}, headers=manager.headers)
+    ms = api.milestone(healthy["id"], manager, start="2026-03-09", due="2026-03-20", hours=100, budget=4000)  # 10 working days
+    api.assign(healthy["id"], ms["id"], busy, manager.headers, start_date="2026-03-09")  # worked Mon, Tue, Wed
+    api.milestone(soon["id"], manager, name="Past due", start="2026-03-02", due="2026-03-05", hours=10, budget=100)
     api.client.post(f"/projects/{healthy['id']}/costs", json={"category": "vendor", "description": "x", "amount": 400, "incurred_on": "2026-03-05"}, headers=manager.headers)
-    api.client.post(f"/projects/{healthy['id']}/time-entries", json={"work_date": "2026-03-11", "hours": 8}, headers=busy.headers)
 
     out = api.client.get("/reports/overview", headers=manager.headers).json()
     assert [p["name"] for p in out["projects"]] == ["Late", "Soon", "Healthy"]
     assert [p["summary"]["risk_level"] for p in out["projects"]] == ["overdue", "at_risk", "on_track"]
     assert out["counts"] == {"projects": 3, "planned": 0, "active": 3, "completed": 0, "on_track": 1, "at_risk": 1, "overdue": 1}
-    assert out["totals"]["budget"] == 35000 and out["totals"]["labor_cost"] == 400 and out["totals"]["other_cost"] == 400
-    assert out["totals"]["spent"] == 800 and out["totals"]["budget_remaining"] == 34200
-    assert out["totals"]["hours_allocated"] == 1600 and out["totals"]["hours_logged"] == 8
+    totals = out["totals"]
+    assert totals["budget"] == 35000 and totals["labor_cost"] == 1200 and totals["other_cost"] == 400
+    assert totals["spent"] == 1600 and totals["budget_remaining"] == 33400
+    assert totals["hours_allocated"] == 1600 and totals["hours_worked"] == 24
+    assert totals["forecast_cost"] == 10 * 8 * 50 + 400  # the whole planned range plus other costs
     assert late["id"] and out["as_of"] == "2026-03-11"
 
 
 def test_allocation_shows_who_is_busy_and_who_is_free(api, today):
     manager = api.user("manager")
     busy = api.user("employee", "Busy", manager=manager)
-    free = api.user("employee", "Free", manager=manager)
+    api.user("employee", "Free", manager=manager)
     soon = api.user("employee", "Soon", manager=manager)
     now_project = api.project(manager, name="Now", start="2026-03-01", end="2026-04-01")
     next_project = api.project(manager, name="Next", start="2026-05-01", end="2026-06-01")
-    api.assign(now_project["id"], busy)
-    api.assign(next_project["id"], soon)
-    api.client.post(f"/projects/{now_project['id']}/time-entries", json={"work_date": "2026-03-10", "hours": 8}, headers=busy.headers)
+    ms_now = api.milestone(now_project["id"], manager, name="Now work", start="2026-03-09", due="2026-03-27")
+    ms_next = api.milestone(next_project["id"], manager, name="Next work", start="2026-05-04", due="2026-05-29")
+    api.assign(now_project["id"], ms_now["id"], busy, manager.headers, start_date="2026-03-09")
+    api.assign(next_project["id"], ms_next["id"], soon, manager.headers)
 
     out = api.client.get("/reports/overview", headers=manager.headers).json()
     people = {p["name"]: p for p in out["allocation"]}
-    assert people["Busy"]["state"] == "allocated" and people["Busy"]["current_project"]["name"] == "Now"
-    assert people["Busy"]["hours_this_week"] == 0 or people["Busy"]["hours_this_week"] == 8
-    assert people["Free"]["state"] == "available" and people["Free"]["current_project"] is None
-    assert people["Soon"]["state"] == "available" and people["Soon"]["next_project"]["name"] == "Next"
+    assert people["Busy"]["state"] == "allocated"
+    assert people["Busy"]["current_work"]["milestone_name"] == "Now work" and people["Busy"]["current_work"]["project_name"] == "Now"
+    assert people["Busy"]["hours_this_week"] == 24  # Mon, Tue, Wed
+    assert people["Free"]["state"] == "available" and people["Free"]["current_work"] is None
+    assert people["Soon"]["state"] == "available" and people["Soon"]["next_work"]["milestone_name"] == "Next work"
     assert out["available_people"] == 2 and people["Free"]["week_capacity"] == 40
-    assert free.id
 
 
 def test_managers_only_see_their_own_scope_and_admin_sees_all(api, today):
@@ -76,20 +79,33 @@ def test_my_dashboard_for_an_employee(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager)
     project = api.project(manager, budget=9999)
-    api.assign(project["id"], employee, start_date="2026-03-02")
-    api.client.post(f"/projects/{project['id']}/time-entries", json={"work_date": "2026-03-11", "hours": 5}, headers=employee.headers)
-    api.client.post(f"/projects/{project['id']}/time-entries", json={"work_date": "2026-03-10", "hours": 8}, headers=employee.headers)
+    ms = api.milestone(project["id"], manager, hours=100, budget=500)
+    api.deliverable(project["id"], ms["id"], "Spec", done=True, manager=manager)
+    api.deliverable(project["id"], ms["id"], "Tests", manager=manager)
+    api.assign(project["id"], ms["id"], employee, manager.headers, start_date="2026-03-09")
 
     mine = api.client.get("/reports/my-dashboard", headers=employee.headers).json()
-    assert mine["current_project"]["name"] == "Apollo"
-    assert mine["hours_today"] == 5 and mine["hours_today_remaining"] == 3
-    assert mine["hours_this_week"] == 13 and mine["week_capacity"] == 40  # Mon 9 .. Sun 15
-    assert len(mine["recent_entries"]) == 2
+    assert mine["current_work"]["milestone_name"] == "Build" and mine["current_work"]["project_name"] == "Apollo"
+    assert mine["hours_today"] == 8 and mine["hours_this_week"] == 24 and mine["week_capacity"] == 40
+    assert len(mine["my_milestones"]) == 1
+    work = mine["my_milestones"][0]
+    assert work["milestone_name"] == "Build" and work["deliverables_total"] == 2 and work["deliverables_done"] == 1
     assert [p["name"] for p in mine["projects"]] == ["Apollo"] and mine["projects"][0]["budget_amount"] is None
+
+
+def test_weekends_are_not_shifts(api, today, monkeypatch):
+    from app.core import dates
+
+    manager = api.user("manager")
+    employee = api.user("employee", manager=manager)
+    api.setup_work(manager, employee)
+    monkeypatch.setattr(dates, "today", lambda: __import__("datetime").date(2026, 3, 14))  # a Saturday
+    mine = api.client.get("/reports/my-dashboard", headers=employee.headers).json()
+    assert mine["hours_today"] == 0
 
 
 def test_my_dashboard_for_a_manager_lists_their_projects(api, today):
     manager = api.user("manager")
     api.project(manager, name="Mine")
     mine = api.client.get("/reports/my-dashboard", headers=manager.headers).json()
-    assert [p["name"] for p in mine["projects"]] == ["Mine"] and mine["current_project"] is None
+    assert [p["name"] for p in mine["projects"]] == ["Mine"] and mine["current_work"] is None and mine["my_milestones"] == []

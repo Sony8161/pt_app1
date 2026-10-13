@@ -50,8 +50,7 @@ def test_visibility_by_role_returns_404_not_403(api, today):
     mine, other = api.user("manager", "Mine"), api.user("manager", "Other")
     on_it = api.user("employee", "On It", manager=mine)
     not_on_it = api.user("employee", "Not On It", manager=mine)
-    project = api.project(mine)
-    assert api.assign(project["id"], on_it).status_code == 201
+    project, _ = api.setup_work(mine, on_it)
     url = f"/projects/{project['id']}"
 
     assert api.client.get(url, headers=api.admin.headers).status_code == 200
@@ -68,12 +67,12 @@ def test_visibility_by_role_returns_404_not_403(api, today):
 def test_employee_never_sees_money(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager)
-    project = api.project(manager, budget=12345)
-    api.assign(project["id"], employee)
+    project, _ = api.setup_work(manager, employee)
     seen = api.client.get(f"/projects/{project['id']}", headers=employee.headers).json()
     assert seen["budget_amount"] is None
-    assert all(seen["summary"][k] is None for k in ("labor_cost", "other_cost", "total_cost", "budget_remaining", "budget_pct"))
-    assert api.client.get(f"/projects/{project['id']}", headers=manager.headers).json()["budget_amount"] == 12345
+    money = ("labor_cost", "other_cost", "total_cost", "budget_remaining", "budget_pct", "forecast_cost")
+    assert all(seen["summary"][k] is None for k in money)
+    assert api.client.get(f"/projects/{project['id']}", headers=manager.headers).json()["budget_amount"] == 50000
 
 
 def test_search_filter_and_paging(api, today):
@@ -104,47 +103,42 @@ def test_manager_edits_budget_but_cannot_reassign_or_touch_others(api, today):
 def test_employee_cannot_edit(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager)
-    project = api.project(manager)
-    api.assign(project["id"], employee)
+    project, _ = api.setup_work(manager, employee)
     assert api.client.patch(f"/projects/{project['id']}", json={"budget_amount": 1}, headers=employee.headers).status_code == 403
     assert api.client.post(f"/projects/{project['id']}/complete", headers=employee.headers).status_code == 403
 
 
-def test_dates_cannot_shrink_past_milestones_or_team(api, today):
+def test_dates_cannot_shrink_past_milestones(api, today):
     manager = api.user("manager")
-    employee = api.user("employee", manager=manager)
     project = api.project(manager, start="2026-03-02", end="2026-04-30")
     pid = project["id"]
-    api.client.post(f"/projects/{pid}/milestones", json={"name": "M1", "start_date": "2026-03-10", "due_date": "2026-04-20", "allocated_hours": 10}, headers=manager.headers)
-    api.assign(pid, employee, start_date="2026-03-05", end_date="2026-04-25")
+    api.milestone(pid, manager, name="M1", start="2026-03-10", due="2026-04-20", hours=10, budget=100)
     url = f"/projects/{pid}"
     assert api.client.patch(url, json={"end_date": "2026-04-10"}, headers=manager.headers).status_code == 400
-    assert api.client.patch(url, json={"start_date": "2026-03-08"}, headers=manager.headers).status_code == 400
+    assert api.client.patch(url, json={"start_date": "2026-03-12"}, headers=manager.headers).status_code == 400
     assert api.client.patch(url, json={"start_date": "2026-03-01", "end_date": "2026-05-15"}, headers=manager.headers).status_code == 200
-    too_few = api.client.patch(url, json={"allocated_hours": 5}, headers=manager.headers)
-    assert too_few.status_code == 400 and too_few.json()["error"]["details"][0]["field"] == "allocated_hours"
 
 
-def test_completing_releases_the_team_and_freezes_the_project(api, today):
+def test_completing_ends_everyones_work_today_and_freezes_the_project(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager)
-    first = api.project(manager, name="First")
-    api.assign(first["id"], employee)
+    first, ms1 = api.setup_work(manager, employee, project="First")
     second = api.project(manager, name="Second", start="2026-03-02", end="2026-06-30")
-    clash = api.assign(second["id"], employee)  # still busy on First
-    assert clash.status_code == 409
+    ms2 = api.milestone(second["id"], manager, name="Next", start="2026-03-09", due="2026-06-30")
+    assert api.assign(second["id"], ms2["id"], employee, manager.headers).status_code == 409  # still busy on First
 
     done = api.client.post(f"/projects/{first['id']}/complete", headers=manager.headers)
     assert done.status_code == 200 and done.json()["status"] == "completed" and done.json()["completed_at"]
     assert done.json()["summary"]["risk_level"] == "done"
 
     # busy until today inclusive; free from tomorrow
-    assert api.assign(second["id"], employee).status_code == 409
-    assert api.assign(second["id"], employee, start_date="2026-03-12").status_code == 201
+    assert api.assign(second["id"], ms2["id"], employee, manager.headers).status_code == 409
+    assert api.assign(second["id"], ms2["id"], employee, manager.headers, start_date="2026-03-12").status_code == 201
 
     frozen = api.client.patch(f"/projects/{first['id']}", json={"budget_amount": 1}, headers=manager.headers)
     assert frozen.status_code == 409
     assert api.client.post(f"/projects/{first['id']}/complete", headers=manager.headers).status_code == 409
+    assert ms1["id"]
 
 
 def test_cannot_complete_a_project_that_has_not_started(api, today):

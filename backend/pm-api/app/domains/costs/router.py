@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
 
 from app.core.deps import ActiveUser, DbConn, ManagerOrAdmin
 from app.domains.costs import service
@@ -14,9 +14,9 @@ router = APIRouter(prefix="/projects/{project_id}/costs", tags=["costs"])
 
 
 @router.get("", response_model=CostList)
-def list_costs(project_id: uuid.UUID, actor: ActiveUser, conn: DbConn) -> CostList:
-    """Non-labor costs with totals against the budget (not available to employees)."""
-    return service.list_costs(conn, actor, project_id)
+def list_costs(project_id: uuid.UUID, actor: ActiveUser, conn: DbConn, include_archived: bool = False) -> CostList:
+    """Non-labor costs with totals against the budget (not available to employees; only admins can include archived lines)."""
+    return service.list_costs(conn, actor, project_id, include_archived=include_archived)
 
 
 @router.post("", response_model=CostOut, status_code=status.HTTP_201_CREATED)
@@ -31,8 +31,7 @@ def update_cost(project_id: uuid.UUID, cost_id: uuid.UUID, payload: CostUpdate, 
     return service.update_cost(conn, actor, project_id, cost_id, payload)
 
 
-@router.delete("/{cost_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_cost(project_id: uuid.UUID, cost_id: uuid.UUID, actor: ManagerOrAdmin, conn: DbConn) -> Response:
-    """Remove a cost line (archived, not deleted)."""
-    service.remove_cost(conn, actor, project_id, cost_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{cost_id}/archive", response_model=CostOut)
+def archive_cost(project_id: uuid.UUID, cost_id: uuid.UUID, actor: ManagerOrAdmin, conn: DbConn) -> CostOut:
+    """Take a cost line out of the totals. It is archived, never deleted, and only admins can see it."""
+    return service.archive_cost(conn, actor, project_id, cost_id)

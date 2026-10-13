@@ -1,6 +1,6 @@
 # Postman collection: ACME Project Tracker API
 
-A complete, self-checking test flow for the API: **126 requests, 502 assertions**, with the expected JSON
+A complete, self-checking test flow for the API: **138 requests, 554 assertions**, with the expected JSON
 response saved as an example on every request.
 
 | File | What it is |
@@ -36,17 +36,17 @@ response saved as an example on every request.
 | 01 Auth | first login, forced password change, weak passwords, token revocation, 401/403 |
 | 02 Users | create people (generated username and one-time password), role rules, salary visibility, archive/restore |
 | 03 Projects | admin creates for one manager, visibility (404, not 403), budget edits, search and paging |
-| 04 Milestones | dates and hours must fit the project; marking a milestone done |
-| 05 Team | an employee gives one project their full 8-hour day, overlapping assignments are refused |
-| 06 Time | 8 hours a day cap, only inside assignment dates, never the future |
-| 07 Costs | non-labor costs and the budget math |
+| 04 Milestones | planned hours/budget must fit the project; dates must fit; status changes |
+| 05 Deliverables | the checklist a manager ticks off; completing is refused while items are open |
+| 06 Team | several people per milestone, one milestone per person per day (overlap is refused), archived rows are admin-only |
+| 07 Costs | non-labor costs, the budget maths, archiving instead of deleting |
 | 08 Reports | overview, allocation and personal dashboard |
-| 09 Project lifecycle | complete (releases the team), archive, restore |
+| 09 Completion and archive | complete a milestone after review (it moves to the admin-only archive), cancel one, complete/archive/restore a project, no DELETE exists |
 | 10 Admin | demo data |
 
 Every error follows one shape: `{"error": {"code", "message", "details": []}}`. Every request in the collection
 asserts its status code and the important fields, and stores the ids and tokens the next request needs
-(`admin_token`, `manager_token`, `employee_token`, `project_id`, ...). Dates are relative to today, so it works any day.
+(`admin_token`, `manager_token`, `employee_token`, `project_id`, ...). Dates are relative to today, so it works any day. Hours and costs come from the calendar (Monday-Friday are 8-hour shifts), so the collection checks them by type rather than exact amount: the totals depend on which weekday you run it.
 
 ## Regenerate
 

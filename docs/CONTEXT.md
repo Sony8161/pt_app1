@@ -23,20 +23,27 @@ and their status, dependency between deliverables (milestones), and budget consu
 
 ## Decisions taken with the user
 - Everything is driven by **start and end dates** (schedule progress, risk, planned to active).
-- An employee gives **one project their full 8-hour day**. They may be on several projects over time, but their
-  assignments (date ranges) never overlap, and they log at most 8 hours a day.
-- `salary` is an **hourly** rate. Labor cost = hours x salary.
+- **Milestones are the building blocks and the unit of work.** An employee is assigned to a milestone (several
+  people may share one) and works **one milestone per day**; assignments of one person never overlap.
+- **No time tracking.** Every Monday-Friday inside an assignment is an 8-hour shift, so hours and cost follow from the
+  calendar: working days x 8 x `salary`. Worked time counts up to today; a forecast counts the whole planned range.
+- `salary` is an **hourly** rate. A milestone has a planned hours figure and budget set by the manager (business needs).
+- **Nothing is ever deleted** and the API has no DELETE operations. Removing means archiving, and only admins can see
+  archived records (`include_archived`). A manager **completes a milestone after ticking every deliverable**; it then
+  moves to the archive (still counted in project progress). Cancelling a milestone archives it without counting it.
+- Each employee has exactly one manager (already the case; a manager may have many employees).
 - **Admin is a system role**, not the managers' boss in the org chart.
 - **Backend first**, frontend after the API is fully working.
 - Branching: `develop` (QA, LocalStack) -> `main` (prod, AWS), tags `vX.Y.Z`.
-- Assumptions made (not confirmed): only employees go on teams; employees never see money; projects a user may not
-  see return 404, not 403; completing or archiving a project ends its assignments today.
+- Assumptions made (not confirmed): only employees go on milestones; employees never see money; projects a user may
+  not see return 404, not 403; completing or archiving a milestone/project, or removing a person, ends their work today
+  (they are free from tomorrow); a milestone needs at least one deliverable, all ticked, before it can be completed.
 
 ## What exists
 | Area | State |
 |---|---|
-| `backend/pm-api` | Done: auth, users, projects, milestones, team, time, costs, reports, demo-data. 120 tests, 96% coverage |
-| `docs/postman` | Done: 126-request collection with saved example JSON, verified with Newman (502 assertions) |
+| `backend/pm-api` | Done: auth, users, projects, milestones, deliverables, milestone teams, costs, reports, demo-data. 142 tests, 96.7% coverage, no DELETE endpoints |
+| `docs/postman` | Done: 138-request collection with saved example JSON, verified with Newman (554 assertions) |
 | `infra/`, `bin/` | Fixed for the app (auth header, CloudFront, Aurora, secrets); `terraform validate` passes; not applied |
 | LocalStack / AWS deploy | **Not done**: needs `sudo` to rebind Postgres, run `./bin/start-dev.sh` |
 | `frontend/` | **Not started** (still the Vite hello-world) |
@@ -60,7 +67,9 @@ npx newman run docs/postman/acme-pm-api.postman_collection.json -e docs/postman/
 - LocalStack Lambda reaches Postgres at `172.17.0.1`, so Postgres must listen on `0.0.0.0` (`start-dev.sh` does it).
 
 ## Known limits
-- Labor cost uses today's salary for all hours, so a raise reprices history (fix: store the rate per time entry).
+- Labor cost uses today's salary for all worked days, so a raise reprices history (fix: store the rate per assignment).
+- Public holidays are not modelled: every Monday-Friday is a shift.
+- The old time-entry and project-assignment tables are kept as `legacy_*` (migration 002) because nothing is dropped.
 - No login throttling. One shared DB connection per Lambda container (fine on Lambda, not for threaded servers).
 - Aurora minimum capacity is 0.5 ACU (about $43 a month) so it never pauses.
 

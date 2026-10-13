@@ -34,10 +34,11 @@ def build_summary(row: dict[str, Any], today: dt.date, *, include_costs: bool = 
     days_remaining = (end - today).days
 
     allocated = float(row["allocated_hours"])
-    logged = float(row["hours_logged"])
-    hours_pct = _pct(logged, allocated)
+    worked = float(row["hours_worked"])
+    hours_pct = _pct(worked, allocated)
 
     labor = float(row["labor_cost"])
+    forecast = float(row["forecast_cost"]) + float(row["other_cost"])
     other = float(row["other_cost"])
     budget = float(row["budget_amount"])
     total_cost = labor + other
@@ -52,6 +53,7 @@ def build_summary(row: dict[str, Any], today: dt.date, *, include_costs: bool = 
         hours_pct=hours_pct,
         budget_pct=budget_pct if include_costs else None,
         overspend=total_cost - budget,
+        forecast_over=(forecast - budget) if include_costs and budget > 0 else 0.0,
         milestones_open=m_total - m_done,
         milestones_overdue=m_overdue,
     )
@@ -61,8 +63,8 @@ def build_summary(row: dict[str, Any], today: dt.date, *, include_costs: bool = 
         "days_elapsed": elapsed_days,
         "days_remaining": days_remaining,
         "schedule_pct": schedule_pct,
-        "hours_logged": round(logged, 2),
-        "hours_remaining": round(allocated - logged, 2),
+        "hours_worked": round(worked, 2),
+        "hours_remaining": round(allocated - worked, 2),
         "hours_pct": hours_pct,
         "milestones_total": m_total,
         "milestones_done": m_done,
@@ -76,9 +78,11 @@ def build_summary(row: dict[str, Any], today: dt.date, *, include_costs: bool = 
         "total_cost": None,
         "budget_remaining": None,
         "budget_pct": None,
+        "forecast_cost": None,
     }
     if include_costs:
         summary.update(
+            forecast_cost=round(forecast, 2),
             labor_cost=round(labor, 2),
             other_cost=round(other, 2),
             total_cost=round(total_cost, 2),
@@ -96,6 +100,7 @@ def _assess(
     hours_pct: float | None,
     budget_pct: float | None,
     overspend: float,
+    forecast_over: float,
     milestones_open: int,
     milestones_overdue: int,
 ) -> tuple[str, list[str]]:
@@ -118,9 +123,11 @@ def _assess(
             reasons.append(f"{budget_pct:.0f}% of the budget is used")
         elif budget_pct > schedule_pct + AHEAD_MARGIN:
             reasons.append(f"Spending ({budget_pct:.0f}%) is ahead of the calendar ({schedule_pct:.0f}%)")
+    if forecast_over > 0 and (budget_pct is None or budget_pct <= 100):
+        reasons.append(f"Planned staffing will cost ${forecast_over:,.2f} more than the budget")
     if hours_pct is not None:
         if hours_pct > 100:
-            reasons.append("More hours logged than allocated")
+            reasons.append("More hours worked than allocated")
         elif hours_pct > schedule_pct + AHEAD_MARGIN:
             reasons.append(f"Hours used ({hours_pct:.0f}%) are ahead of the calendar ({schedule_pct:.0f}%)")
     if 0 <= days_remaining <= ENDING_SOON_DAYS and milestones_open > 0:

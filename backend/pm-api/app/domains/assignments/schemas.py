@@ -1,4 +1,4 @@
-"""Pydantic models for project teams."""
+"""Pydantic models for milestone teams."""
 
 from __future__ import annotations
 
@@ -8,23 +8,23 @@ import uuid
 from pydantic import BaseModel, Field
 
 
-class TeamMemberAdd(BaseModel):
-    """Put an employee on the project team. Dates default to the project's (or today, if it has started)."""
+class AssigneeAdd(BaseModel):
+    """Put an employee on a milestone. Dates default to the milestone's (starting today if it has begun)."""
 
     user_id: uuid.UUID
     start_date: dt.date | None = None
     end_date: dt.date | None = None
 
 
-class TeamMemberDates(BaseModel):
-    """Change when an employee works on the project."""
+class AssigneeDates(BaseModel):
+    """Change when an employee works on the milestone."""
 
     start_date: dt.date | None = None
     end_date: dt.date | None = None
 
 
-class TeamMemberOut(BaseModel):
-    """One person on a project team."""
+class AssigneeOut(BaseModel):
+    """One person working on one milestone. Every Monday-Friday in the range is an 8-hour shift."""
 
     assignment_id: uuid.UUID
     user_id: uuid.UUID
@@ -32,15 +32,22 @@ class TeamMemberOut(BaseModel):
     username: str
     email: str
     job_title: str
+    milestone_id: uuid.UUID
+    milestone_name: str
+    project_id: uuid.UUID
     start_date: dt.date
     end_date: dt.date
-    daily_hours: int = Field(description="Hours per working day this person gives the project")
-    hours_logged: float
-    labor_cost: float | None = Field(description="Hidden (null) from employees")
+    daily_hours: int = Field(description="Hours in one shift")
+    days_worked: int = Field(description="Working days from the start until today (or the end)")
+    hours_worked: float
+    labor_cost: float | None = Field(description="Hours worked x salary so far; hidden (null) from employees")
+    archived_at: dt.datetime | None
 
 
-class TeamList(BaseModel):
-    """The project team."""
+class AssigneeList(BaseModel):
+    """People on a milestone or across a project."""
 
-    items: list[TeamMemberOut]
+    items: list[AssigneeOut]
     total: int
+    hours_worked: float
+    labor_cost: float | None

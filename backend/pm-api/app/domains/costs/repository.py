@@ -12,19 +12,24 @@ from psycopg import sql
 _EDITABLE = frozenset({"category", "description", "amount", "incurred_on"})
 
 
-def list_for_project(conn: psycopg.Connection[Any], project_id: uuid.UUID) -> list[dict[str, Any]]:
-    """Live cost lines, newest first."""
+def list_for_project(
+    conn: psycopg.Connection[Any], project_id: uuid.UUID, *, include_archived: bool = False
+) -> list[dict[str, Any]]:
+    """Cost lines, newest first; archived ones only when asked (admins)."""
     return conn.execute(
-        "SELECT * FROM project_costs WHERE project_id = %s AND archived_at IS NULL "
+        "SELECT * FROM project_costs WHERE project_id = %s AND (%s OR archived_at IS NULL) "
         "ORDER BY incurred_on DESC, created_at DESC",
-        (project_id,),
+        (project_id, include_archived),
     ).fetchall()
 
 
-def get(conn: psycopg.Connection[Any], project_id: uuid.UUID, cost_id: uuid.UUID) -> dict[str, Any] | None:
-    """One live cost line of a project."""
+def get(
+    conn: psycopg.Connection[Any], project_id: uuid.UUID, cost_id: uuid.UUID, *, include_archived: bool = False
+) -> dict[str, Any] | None:
+    """One cost line of a project; archived ones only when asked (admins)."""
     return conn.execute(
-        "SELECT * FROM project_costs WHERE id = %s AND project_id = %s AND archived_at IS NULL", (cost_id, project_id)
+        "SELECT * FROM project_costs WHERE id = %s AND project_id = %s AND (%s OR archived_at IS NULL)",
+        (cost_id, project_id, include_archived),
     ).fetchone()
 
 

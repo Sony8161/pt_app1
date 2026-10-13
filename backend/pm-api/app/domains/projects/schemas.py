@@ -52,7 +52,7 @@ class ProjectSummary(BaseModel):
     days_elapsed: int
     days_remaining: int = Field(description="Negative when the end date has passed")
     schedule_pct: float = Field(description="Share of the calendar that has passed")
-    hours_logged: float
+    hours_worked: float = Field(description="Working days so far x 8 x people on milestones")
     hours_remaining: float
     hours_pct: float | None
     milestones_total: int
@@ -64,6 +64,7 @@ class ProjectSummary(BaseModel):
     risk_reasons: list[str]
     # Money fields are hidden (null) from employees.
     labor_cost: float | None
+    forecast_cost: float | None = Field(description="Cost if everyone stays assigned for the whole planned range")
     other_cost: float | None
     total_cost: float | None
     budget_remaining: float | None

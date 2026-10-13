@@ -170,14 +170,16 @@ def test_cannot_archive_manager_with_projects_or_reports(api):
 def test_archive_and_unarchive_employee_keeps_history(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager)
-    project = api.project(manager)
-    assert api.assign(project["id"], employee).status_code == 201
+    project, ms = api.setup_work(manager, employee)
 
     archived = api.client.post(f"/users/{employee.id}/archive", headers=api.admin.headers).json()
     assert archived["archived_at"] is not None
-    assert api.client.get(f"/projects/{project['id']}/team", headers=api.admin.headers).json()["total"] == 0
+    # their work ends today and the days they worked stay on record
+    team = api.client.get(f"/projects/{project['id']}/milestones/{ms['id']}/team", headers=api.admin.headers).json()
+    assert team["total"] == 1 and team["items"][0]["end_date"] == "2026-03-11" and team["items"][0]["hours_worked"] == 8
     assert employee.id not in {u["id"] for u in api.client.get("/users", headers=api.admin.headers).json()["items"]}
-    assert employee.id in {u["id"] for u in api.client.get("/users?include_archived=true", headers=api.admin.headers).json()["items"]}
+    listed = api.client.get("/users?include_archived=true", headers=api.admin.headers).json()["items"]
+    assert employee.id in {u["id"] for u in listed}
 
     restored = api.client.post(f"/users/{employee.id}/unarchive", headers=api.admin.headers).json()
     assert restored["archived_at"] is None

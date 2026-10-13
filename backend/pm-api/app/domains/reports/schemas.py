@@ -9,7 +9,6 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.domains.projects.schemas import ProjectOut
-from app.domains.time_entries.schemas import TimeEntryOut
 
 
 class OverviewCounts(BaseModel):
@@ -32,30 +31,33 @@ class OverviewTotals(BaseModel):
     labor_cost: float
     other_cost: float
     budget_remaining: float
+    forecast_cost: float = Field(description="Cost if everyone stays assigned for the whole planned range")
     hours_allocated: float
-    hours_logged: float
+    hours_worked: float
 
 
-class ProjectRef(BaseModel):
-    """A project reference with its dates."""
+class WorkRef(BaseModel):
+    """The milestone someone works on, with its project."""
 
-    id: uuid.UUID
-    name: str
+    project_id: uuid.UUID
+    project_name: str
+    milestone_id: uuid.UUID
+    milestone_name: str
     start_date: dt.date
     end_date: dt.date
 
 
 class PersonAllocation(BaseModel):
-    """Where one employee's time goes."""
+    """Where one employee's shifts go."""
 
     user_id: uuid.UUID
     name: str
     job_title: str
     manager_name: str | None
     state: Literal["allocated", "available"]
-    current_project: ProjectRef | None
-    next_project: ProjectRef | None
-    hours_this_week: float
+    current_work: WorkRef | None
+    next_work: WorkRef | None
+    hours_this_week: float = Field(description="Hours worked this week up to today (working days x 8)")
     week_capacity: int = Field(description="Working hours in a full week (5 x 8)")
 
 
@@ -70,14 +72,28 @@ class Overview(BaseModel):
     available_people: int
 
 
+class MyMilestone(BaseModel):
+    """A milestone the signed-in person works on."""
+
+    project_id: uuid.UUID
+    project_name: str
+    milestone_id: uuid.UUID
+    milestone_name: str
+    status: str
+    start_date: dt.date = Field(description="First day this person works on it")
+    end_date: dt.date = Field(description="Last day this person works on it")
+    due_date: dt.date
+    deliverables_total: int
+    deliverables_done: int
+
+
 class MyDashboard(BaseModel):
     """The signed-in person's own view."""
 
     as_of: dt.date
-    current_project: ProjectRef | None
+    current_work: WorkRef | None
+    my_milestones: list[MyMilestone]
     projects: list[ProjectOut]
-    hours_today: float
-    hours_today_remaining: float
+    hours_today: float = Field(description="8 on a working day when you are on a milestone, otherwise 0")
     hours_this_week: float
     week_capacity: int
-    recent_entries: list[TimeEntryOut]

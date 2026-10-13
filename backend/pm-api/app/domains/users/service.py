@@ -13,7 +13,7 @@ from typing import Any
 
 import psycopg
 
-from app.core import security
+from app.core import dates, security
 from app.core.deps import CurrentUser
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.domains.assignments import repository as assignments_repo
@@ -232,7 +232,7 @@ def archive_user(conn: psycopg.Connection[Any], actor: CurrentUser, user_id: uui
     if target["role"] == "manager":
         _ensure_manager_is_free(conn, user_id, "archive")
     row = users_repo.set_archived(conn, user_id, archived=True)
-    assignments_repo.archive_for_user(conn, user_id)
+    assignments_repo.end_for_user(conn, user_id, dates.today())
     if row is None:  # pragma: no cover - loaded a moment ago
         raise NotFoundError("User not found")
     return present(row, actor)

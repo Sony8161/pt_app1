@@ -27,21 +27,24 @@ def _writable_project(conn: psycopg.Connection[Any], actor: CurrentUser, project
     return project
 
 
-def list_costs(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid.UUID) -> CostList:
-    """Cost lines and totals. Employees cannot see project money."""
+def list_costs(
+    conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid.UUID, *, include_archived: bool
+) -> CostList:
+    """Cost lines and totals. Employees cannot see project money; only admins can include archived lines."""
     project = projects.get_visible(conn, actor, project_id)
     if actor.role == "employee":
         raise ForbiddenError("Costs are only visible to the project's manager and admins")
-    rows = repo.list_for_project(conn, project_id)
+    rows = repo.list_for_project(conn, project_id, include_archived=include_archived and actor.is_admin)
     by_category: dict[str, float] = defaultdict(float)
     for row in rows:
-        by_category[row["category"]] += float(row["amount"])
+        if row["archived_at"] is None:  # archived lines never count towards the totals
+            by_category[row["category"]] += float(row["amount"])
     other = sum(by_category.values())
     labor = float(project["labor_cost"])
     budget = float(project["budget_amount"])
     return CostList(
         items=[_out(r) for r in rows],
-        total=len(rows),
+        total=sum(1 for r in rows if r["archived_at"] is None),
         other_cost=round(other, 2),
         by_category={k: round(v, 2) for k, v in by_category.items()},
         labor_cost=round(labor, 2),
@@ -66,8 +69,10 @@ def add_cost(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid
     return _out(_load(conn, project_id, cost_id))
 
 
-def _load(conn: psycopg.Connection[Any], project_id: uuid.UUID, cost_id: uuid.UUID) -> dict[str, Any]:
-    row = repo.get(conn, project_id, cost_id)
+def _load(
+    conn: psycopg.Connection[Any], project_id: uuid.UUID, cost_id: uuid.UUID, *, include_archived: bool = False
+) -> dict[str, Any]:
+    row = repo.get(conn, project_id, cost_id, include_archived=include_archived)
     if row is None:
         raise NotFoundError("Cost not found")
     return row
@@ -89,8 +94,9 @@ def update_cost(
     return _out(_load(conn, project_id, cost_id))
 
 
-def remove_cost(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid.UUID, cost_id: uuid.UUID) -> None:
-    """Remove a cost line (archived, not deleted)."""
+def archive_cost(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: uuid.UUID, cost_id: uuid.UUID) -> CostOut:
+    """Take a cost line out of the totals (archived, never deleted; only admins can see it afterwards)."""
     _writable_project(conn, actor, project_id)
     _load(conn, project_id, cost_id)
     repo.archive(conn, cost_id)
+    return _out(_load(conn, project_id, cost_id, include_archived=True))

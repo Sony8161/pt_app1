@@ -40,6 +40,7 @@ class CostOut(BaseModel):
     amount: float
     incurred_on: dt.date
     created_at: dt.datetime
+    archived_at: dt.datetime | None = Field(default=None, description="Only admins can see archived costs")
 
 
 class CostList(BaseModel):

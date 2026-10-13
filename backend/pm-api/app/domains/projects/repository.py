@@ -21,34 +21,39 @@ PROJECT_ROWS = sql.SQL(
            CASE WHEN p.status = 'planned' AND p.start_date <= %(today)s THEN 'active' ELSE p.status END AS status,
            p.start_date, p.end_date, p.allocated_hours, p.budget_amount,
            p.completed_at, p.archived_at, p.created_by, p.created_at, p.updated_at,
-           COALESCE(t.hours, 0)         AS hours_logged,
+           COALESCE(t.hours, 0)         AS hours_worked,
            COALESCE(t.labor, 0)         AS labor_cost,
+           COALESCE(t.forecast, 0)      AS forecast_cost,
            COALESCE(c.total, 0)         AS other_cost,
            COALESCE(ms.total, 0)        AS milestones_total,
            COALESCE(ms.done, 0)         AS milestones_done,
            COALESCE(ms.overdue, 0)      AS milestones_overdue,
-           COALESCE(tm.n, 0)            AS team_size
+           COALESCE(t.people, 0)        AS team_size
     FROM projects p
     JOIN users mu ON mu.id = p.manager_id
     LEFT JOIN LATERAL (
-        SELECT sum(te.hours) AS hours, sum(te.hours * u.salary) AS labor
-        FROM time_entries te JOIN users u ON u.id = te.user_id
-        WHERE te.project_id = p.id AND te.archived_at IS NULL
+        -- Every Monday-Friday of an assignment is an 8-hour shift; worked time counts up to today,
+        -- the forecast counts the whole planned range.
+        SELECT sum(working_days(a.start_date, LEAST(a.end_date, %(today)s))) * 8                      AS hours,
+               sum(working_days(a.start_date, LEAST(a.end_date, %(today)s)) * 8 * u.salary)            AS labor,
+               sum(working_days(a.start_date, a.end_date) * 8 * u.salary)                              AS forecast,
+               count(DISTINCT a.user_id)                                                               AS people
+        FROM milestone_assignments a
+        JOIN milestones m ON m.id = a.milestone_id
+        JOIN users u ON u.id = a.user_id
+        WHERE m.project_id = p.id AND a.archived_at IS NULL
     ) t ON true
     LEFT JOIN LATERAL (
         SELECT sum(amount) AS total FROM project_costs
         WHERE project_id = p.id AND archived_at IS NULL
     ) c ON true
     LEFT JOIN LATERAL (
-        SELECT count(*) AS total,
-               count(*) FILTER (WHERE status = 'done') AS done,
-               count(*) FILTER (WHERE status <> 'done' AND due_date < %(today)s) AS overdue
-        FROM milestones WHERE project_id = p.id AND archived_at IS NULL
+        -- Completed milestones are archived but still count; cancelled ones (archived, not completed) do not.
+        SELECT count(*) FILTER (WHERE archived_at IS NULL OR status = 'completed')                    AS total,
+               count(*) FILTER (WHERE status = 'completed')                                           AS done,
+               count(*) FILTER (WHERE status <> 'completed' AND archived_at IS NULL AND due_date < %(today)s) AS overdue
+        FROM milestones WHERE project_id = p.id
     ) ms ON true
-    LEFT JOIN LATERAL (
-        SELECT count(*) AS n FROM project_assignments
-        WHERE project_id = p.id AND archived_at IS NULL
-    ) tm ON true
     """
 )
 
@@ -83,8 +88,8 @@ def search(
     elif viewer_role == "employee":
         where.append(
             sql.SQL(
-                "EXISTS (SELECT 1 FROM project_assignments a WHERE a.project_id = q.id "
-                "AND a.user_id = %(viewer)s AND a.archived_at IS NULL)"
+                "EXISTS (SELECT 1 FROM milestone_assignments a JOIN milestones m ON m.id = a.milestone_id "
+                "WHERE m.project_id = q.id AND a.user_id = %(viewer)s AND a.archived_at IS NULL AND m.archived_at IS NULL)"
             )
         )
     if not include_archived:

@@ -38,7 +38,10 @@ get_settings.cache_clear()
 
 BOOTSTRAP_USER, BOOTSTRAP_PASSWORD = "admin1", "ChangeMe123!"
 GOOD_PASSWORD = "Passw0rd-xyz"
-TABLES = "project_costs, time_entries, project_assignments, milestones, projects, users"
+TABLES = (
+    "deliverables, milestone_assignments, legacy_time_entries, legacy_project_assignments, "
+    "time_entries, project_assignments, project_costs, milestones, projects, users"
+)
 
 
 def _admin_conninfo(dbname: str = "postgres") -> str:
@@ -157,11 +160,45 @@ class Helpers:
         assert resp.status_code == 201, resp.text
         return resp.json()
 
-    def assign(self, project_id: str, employee: Person, manager_headers: dict[str, str] | None = None, **dates_: str) -> Any:
+    def milestone(self, project_id: str, manager: Person | None = None, name: str = "Build", start: str = "2026-03-09",
+                  due: str = "2026-03-27", hours: float = 200, budget: float = 10000) -> dict[str, Any]:
+        """Create a milestone (default: Mon 9 March to Fri 27 March 2026, which contains the frozen 'today')."""
+        resp = self.client.post(
+            f"/projects/{project_id}/milestones",
+            json={"name": name, "start_date": start, "due_date": due, "allocated_hours": hours, "budget_amount": budget},
+            headers=(manager or self.admin).headers,
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    def deliverable(self, project_id: str, milestone_id: str, name: str = "Spec", done: bool = False,
+                    manager: Person | None = None) -> dict[str, Any]:
+        headers = (manager or self.admin).headers
+        url = f"/projects/{project_id}/milestones/{milestone_id}/deliverables"
+        resp = self.client.post(url, json={"name": name}, headers=headers)
+        assert resp.status_code == 201, resp.text
+        item = resp.json()
+        if done:
+            ticked = self.client.patch(f"{url}/{item['id']}", json={"done": True}, headers=headers)
+            assert ticked.status_code == 200, ticked.text
+            item = ticked.json()
+        return item
+
+    def assign(self, project_id: str, milestone_id: str, employee: Person, manager_headers: dict[str, str] | None = None,
+               **dates_: str) -> Any:
         return self.client.post(
-            f"/projects/{project_id}/team", json={"user_id": employee.id, **dates_},
+            f"/projects/{project_id}/milestones/{milestone_id}/team", json={"user_id": employee.id, **dates_},
             headers=manager_headers or self.admin.headers,
         )
+
+    def setup_work(self, manager: Person, employee: Person, *, project: str = "Apollo", milestone: str = "Build",
+                   **milestone_args: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        """A project with one milestone and the employee working on it. Returns (project, milestone)."""
+        proj = self.project(manager, name=project)
+        ms = self.milestone(proj["id"], manager, name=milestone, **milestone_args)
+        resp = self.assign(proj["id"], ms["id"], employee, manager.headers)
+        assert resp.status_code == 201, resp.text
+        return proj, ms
 
 
 @pytest.fixture

@@ -16,11 +16,10 @@ from app.domains.admin.router import router as admin_router
 from app.domains.assignments.router import router as team_router
 from app.domains.auth.router import router as auth_router
 from app.domains.costs.router import router as costs_router
+from app.domains.deliverables.router import router as deliverables_router
 from app.domains.milestones.router import router as milestones_router
 from app.domains.projects.router import router as projects_router
 from app.domains.reports.router import router as reports_router
-from app.domains.time_entries.router import my_router as my_time_router
-from app.domains.time_entries.router import router as time_router
 from app.domains.users.router import router as users_router
 from app.seed import ensure_bootstrap_admin
 
@@ -48,7 +47,7 @@ def create_app() -> FastAPI:
         title="ACME Project Tracker API",
         version=__version__,
         description=(
-            "Projects, milestones, teams, time tracking and budgets.\n\n"
+            "Projects, milestones, deliverables, teams and budgets. Every Monday-Friday on a milestone is an 8-hour shift.\n\n"
             "Sign in with `POST /auth/login`, then send `Authorization: Bearer <token>`. "
             "Nothing is ever deleted: removing something archives it."
         ),
@@ -56,8 +55,8 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     for router in (
-        auth_router, users_router, projects_router, milestones_router, team_router,
-        time_router, my_time_router, costs_router, reports_router, admin_router,
+        auth_router, users_router, projects_router, milestones_router, deliverables_router, team_router,
+        costs_router, reports_router, admin_router,
     ):
         app.include_router(router)
 

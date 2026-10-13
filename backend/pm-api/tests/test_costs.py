@@ -1,4 +1,4 @@
-"""Non-labor costs and how they combine with labor against the budget."""
+"""Non-labor costs and how they combine with labor (calendar-based) against the budget."""
 
 from __future__ import annotations
 
@@ -14,34 +14,41 @@ def setup(api, today):
     manager = api.user("manager")
     employee = api.user("employee", manager=manager, salary=50)
     project = api.project(manager, budget=10000)
-    api.assign(project["id"], employee, start_date="2026-03-02")
+    ms = api.milestone(project["id"], manager, budget=5000)
+    api.assign(project["id"], ms["id"], employee, manager.headers, start_date="2026-03-09")  # 3 days worked so far
     return api, manager, employee, project["id"]
 
 
 def test_totals_combine_labor_and_other_costs(setup):
-    api, manager, employee, pid = setup
-    api.client.post(f"/projects/{pid}/time-entries", json={"work_date": "2026-03-10", "hours": 8}, headers=employee.headers)  # 400
+    api, manager, _, pid = setup
     api.client.post(f"/projects/{pid}/costs", json=COST, headers=manager.headers)
-    api.client.post(f"/projects/{pid}/costs", json={**COST, "category": "technology", "description": "Hosting", "amount": 99.5}, headers=manager.headers)
+    api.client.post(f"/projects/{pid}/costs", json={**COST, "category": "technology", "description": "Hosting", "amount": 299.5}, headers=manager.headers)
 
     costs = api.client.get(f"/projects/{pid}/costs", headers=manager.headers).json()
-    assert costs["total"] == 2 and costs["other_cost"] == 1300
-    assert costs["by_category"] == {"license": 1200.5, "technology": 99.5}
-    assert costs["labor_cost"] == 400 and costs["total_cost"] == 1700 and costs["budget_remaining"] == 8300
+    assert costs["total"] == 2 and costs["other_cost"] == 1500
+    assert costs["by_category"] == {"license": 1200.5, "technology": 299.5}
+    assert costs["labor_cost"] == 1200 and costs["total_cost"] == 2700 and costs["budget_remaining"] == 7300  # 3 days x 8 h x $50
 
     summary = api.client.get(f"/projects/{pid}", headers=manager.headers).json()["summary"]
-    assert summary["other_cost"] == 1300 and summary["total_cost"] == 1700 and summary["budget_pct"] == 17.0
+    assert summary["other_cost"] == 1500 and summary["total_cost"] == 2700 and summary["budget_pct"] == 27.0
 
 
-def test_update_and_remove(setup):
+def test_update_and_archive(setup):
     api, manager, _, pid = setup
     cid = api.client.post(f"/projects/{pid}/costs", json=COST, headers=manager.headers).json()["id"]
     fixed = api.client.patch(f"/projects/{pid}/costs/{cid}", json={"amount": 999}, headers=manager.headers)
     assert fixed.status_code == 200 and fixed.json()["amount"] == 999
     assert api.client.patch(f"/projects/{pid}/costs/{cid}", json={"amount": None}, headers=manager.headers).status_code == 400
-    assert api.client.delete(f"/projects/{pid}/costs/{cid}", headers=manager.headers).status_code == 204
-    assert api.client.get(f"/projects/{pid}/costs", headers=manager.headers).json()["total"] == 0
-    assert api.client.delete(f"/projects/{pid}/costs/{cid}", headers=manager.headers).status_code == 404
+
+    archived = api.client.post(f"/projects/{pid}/costs/{cid}/archive", headers=manager.headers)
+    assert archived.status_code == 200 and archived.json()["archived_at"]
+    listed = api.client.get(f"/projects/{pid}/costs", headers=manager.headers).json()
+    assert listed["total"] == 0 and listed["other_cost"] == 0  # archived costs no longer count
+    assert api.client.post(f"/projects/{pid}/costs/{cid}/archive", headers=manager.headers).status_code == 404
+    assert api.client.patch(f"/projects/{pid}/costs/{cid}", json={"amount": 1}, headers=manager.headers).status_code == 404
+
+    admin_view = api.client.get(f"/projects/{pid}/costs?include_archived=true", headers=api.admin.headers).json()
+    assert len(admin_view["items"]) == 1 and admin_view["total"] == 0 and admin_view["other_cost"] == 0
 
 
 def test_validation(setup):
