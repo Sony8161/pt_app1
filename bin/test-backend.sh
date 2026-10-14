@@ -52,7 +52,9 @@ echo "INFO: ruff (lint)"
 ruff check app tests
 
 echo "INFO: bandit (security scan, same as CI)"
-(cd "$PROJECT_ROOT" && bandit -q -r ./backend)
+# Only tracked files, like CI on a clean checkout: ./bin/start-dev.sh pip-installs the dependencies into
+# backend/pm-api for LocalStack (git-ignored), and scanning those would report other people's code.
+(cd "$PROJECT_ROOT" && git ls-files -z -- 'backend/*.py' | xargs -0 bandit -q --ini backend/.bandit)
 
 echo "INFO: pytest"
 python -m pytest tests -p no:warnings --cov --cov-report=term-missing:skip-covered --cov-fail-under=80 "$@"

@@ -70,13 +70,18 @@ def list_for_project(
     ).fetchall()
 
 
-def has_live_on_project(conn: psycopg.Connection[Any], project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
-    """True when the person is on a current (not archived) milestone of the project."""
+def has_live_on_project(conn: psycopg.Connection[Any], project_id: uuid.UUID, user_id: uuid.UUID, today: dt.date) -> bool:
+    """True when the person is on, or about to start, a current (not archived) milestone of the project.
+
+    Someone who was removed or whose assignment ended keeps the row (their worked days stay on record) but no
+    longer sees the project: the work must end today or later.
+    """
     return (
         conn.execute(
             "SELECT 1 FROM milestone_assignments a JOIN milestones m ON m.id = a.milestone_id "
-            "WHERE m.project_id = %s AND a.user_id = %s AND a.archived_at IS NULL AND m.archived_at IS NULL",
-            (project_id, user_id),
+            "WHERE m.project_id = %s AND a.user_id = %s AND a.archived_at IS NULL AND m.archived_at IS NULL "
+            "AND a.end_date >= %s",
+            (project_id, user_id, today),
         ).fetchone()
         is not None
     )

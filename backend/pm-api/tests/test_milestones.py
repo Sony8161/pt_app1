@@ -188,3 +188,21 @@ def test_no_changes_once_the_project_is_completed(setup):
     api, manager, _, pid = setup
     api.client.post(f"/projects/{pid}/complete", headers=manager.headers)
     assert api.client.post(f"/projects/{pid}/milestones", json=M, headers=manager.headers).status_code == 409
+
+
+def test_a_plan_may_use_the_whole_budget_and_hours_to_the_cent(api, today):
+    manager = api.user("manager")
+    project = api.project(manager, budget=7857.21, hours=100.3)
+    pid = project["id"]
+    api.milestone(pid, manager, name="First", budget=5532.60, hours=0.1)
+    second = api.client.post(  # 5532.60 + 2324.61 is 7857.209999999999 as floats, and 0.1 + 100.2 is 100.30000000000001
+        f"/projects/{pid}/milestones",
+        json={"name": "Second", "start_date": "2026-03-09", "due_date": "2026-03-27", "allocated_hours": 100.2, "budget_amount": 2324.61},
+        headers=manager.headers,
+    )
+    assert second.status_code == 201, second.text
+    # lowering the project to exactly what is planned is also fine; one cent less is refused
+    exact = api.client.patch(f"/projects/{pid}", json={"budget_amount": 7857.21, "allocated_hours": 100.3}, headers=manager.headers)
+    assert exact.status_code == 200
+    short = api.client.patch(f"/projects/{pid}", json={"budget_amount": 7857.20}, headers=manager.headers)
+    assert short.status_code == 400

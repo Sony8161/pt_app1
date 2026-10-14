@@ -169,6 +169,9 @@ def update_user(conn: psycopg.Connection[Any], actor: CurrentUser, user_id: uuid
             new_manager = None  # admins sit outside the reporting chain
         if new_role != target["role"]:
             _check_role_change(conn, actor, target, new_role)
+            if new_role != "employee":
+                # Only employees work on milestones; their live assignments would keep costing 8 hours a day.
+                assignments_repo.end_for_user(conn, target["id"], dates.today())
         _check_reporting_line(conn, new_role, new_manager, user_id)
         fields["role"], fields["manager_id"] = new_role, new_manager
 
@@ -212,8 +215,12 @@ def update_me(conn: psycopg.Connection[Any], actor: CurrentUser, payload: Profil
     return present(row, actor)
 
 
-def reset_password(conn: psycopg.Connection[Any], user_id: uuid.UUID) -> str:
+def reset_password(conn: psycopg.Connection[Any], actor: CurrentUser, user_id: uuid.UUID) -> str:
     """Admin sets a new one-time password; the person must change it at next login."""
+    if actor.id == user_id:
+        # A reset signs the person out and shows the new password once. Done to yourself, one stray click
+        # would leave the account (possibly the only admin) without a usable password.
+        raise ConflictError("You cannot reset your own password here. Use Change password instead.", code="self_reset")
     _load(conn, user_id)
     temporary_password = security.generate_password()
     users_repo.set_password(conn, user_id, security.hash_password(temporary_password), must_change_password=True)

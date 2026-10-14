@@ -172,3 +172,25 @@ def test_completing_the_project_ends_everyones_work_today(plan):
     member = api.client.get(f"/projects/{p1['id']}/team", headers=api.admin.headers).json()["items"][0]
     assert member["end_date"] == "2026-03-11"
     assert api.assign(p2["id"], ms2["id"], person, m2.headers, start_date="2026-03-12").status_code == 201
+
+
+def test_someone_who_was_removed_stops_seeing_the_project_once_their_work_has_ended(plan, monkeypatch):
+    import datetime as dt
+
+    from app.core import dates
+
+    api, (m1, p1, ms1), _ = plan
+    person = api.user("employee", manager=m1)
+    api.assign(p1["id"], ms1["id"], person, m1.headers, start_date="2026-03-09")
+    project_url = f"/projects/{p1['id']}"
+    assert api.client.get(project_url, headers=person.headers).status_code == 200
+
+    api.client.post(url(p1, ms1, person.id, "archive"), headers=m1.headers)  # their work ends today (Wed 11 March)
+    assert api.client.get(project_url, headers=person.headers).status_code == 200  # still on it today
+
+    monkeypatch.setattr(dates, "today", lambda: dt.date(2026, 3, 12))  # tomorrow
+    assert api.client.get(project_url, headers=person.headers).status_code == 404
+    assert api.client.get("/projects", headers=person.headers).json()["total"] == 0
+    assert api.client.get(f"{project_url}/milestones", headers=person.headers).status_code == 404
+    assert api.client.get(f"{project_url}/team", headers=person.headers).status_code == 404
+    assert api.client.get(project_url, headers=m1.headers).status_code == 200  # the manager still does

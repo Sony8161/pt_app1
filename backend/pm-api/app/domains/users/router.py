@@ -60,9 +60,9 @@ def update_user(user_id: uuid.UUID, payload: UserUpdate, actor: ManagerOrAdmin, 
 
 
 @router.post("/{user_id}/reset-password", response_model=PasswordReset)
-def reset_password(user_id: uuid.UUID, _: AdminUser, conn: DbConn) -> PasswordReset:
-    """Generate a new one-time password; the person must change it at next login."""
-    return PasswordReset(temporary_password=service.reset_password(conn, user_id))
+def reset_password(user_id: uuid.UUID, actor: AdminUser, conn: DbConn) -> PasswordReset:
+    """Generate a new one-time password for someone else; they must change it at next login."""
+    return PasswordReset(temporary_password=service.reset_password(conn, actor, user_id))
 
 
 @router.post("/{user_id}/archive", response_model=UserOut)

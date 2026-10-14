@@ -89,7 +89,8 @@ def search(
         where.append(
             sql.SQL(
                 "EXISTS (SELECT 1 FROM milestone_assignments a JOIN milestones m ON m.id = a.milestone_id "
-                "WHERE m.project_id = q.id AND a.user_id = %(viewer)s AND a.archived_at IS NULL AND m.archived_at IS NULL)"
+                "WHERE m.project_id = q.id AND a.user_id = %(viewer)s AND a.archived_at IS NULL AND m.archived_at IS NULL "
+                "AND a.end_date >= %(today)s)"
             )
         )
     if not include_archived:

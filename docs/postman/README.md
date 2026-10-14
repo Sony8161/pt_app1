@@ -8,8 +8,14 @@ response saved as an example on every request.
 | `acme-pm-api.postman_collection.json` | The collection (import this) |
 | `local.postman_environment.json` | `http://localhost:8000`, the API run directly with uvicorn |
 | `localstack.postman_environment.json` | `http://localhost:3001/api/pm-api`, via `./bin/start-dev.sh` |
-| `aws.postman_environment.json` | Your CloudFront URL (edit `baseUrl`; the admin password is `terraform output -raw bootstrap_admin_password`) |
+| `aws.postman_environment.json` | A **throwaway** AWS stack only (see the warning below). Edit `baseUrl`, set `initial_admin_password` from `terraform output -raw bootstrap_admin_password`, and set `new_password` to a unique value |
 | `build_collection.py` | Generator: one spec produces the tests **and** runs the flow to capture the examples |
+
+> **Never run this collection against a real or production stack.** It changes the admin password, creates dozens of
+> users and projects, and calls `/admin/seed-demo`. Nothing in the API can be deleted, so that data stays forever, and
+> `new_password` is a value anyone can read in this repository. The `aws` environment ships a placeholder the API
+> refuses, so an unedited run cannot change the admin password; use a disposable stack (its own `aws_app_code`) and
+> `terraform destroy` it afterwards. On production, check `/health` and sign in by hand instead.
 
 ## Run it
 

@@ -17,6 +17,7 @@ import psycopg
 from app.core import dates
 from app.core.deps import CurrentUser
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from app.core.money import fits
 from app.domains.assignments import repository as assignments_repo
 from app.domains.milestones import repository as milestones_repo
 from app.domains.projects import repository as repo
@@ -47,7 +48,7 @@ def get_visible(conn: psycopg.Connection[Any], actor: CurrentUser, project_id: u
     if actor.is_manager:
         if row["manager_id"] != actor.id:
             raise NotFoundError("Project not found")
-    elif not assignments_repo.has_live_on_project(conn, project_id, actor.id):
+    elif not assignments_repo.has_live_on_project(conn, project_id, actor.id, dates.today()):
         raise NotFoundError("Project not found")
     return row
 
@@ -180,11 +181,11 @@ def update_project(
         _check_dates_fit_children(conn, project_id, start, end)
 
     planned = milestones_repo.plan_totals(conn, project_id)
-    if "allocated_hours" in fields and planned["hours"] > fields["allocated_hours"]:
+    if "allocated_hours" in fields and not fits(planned["hours"], fields["allocated_hours"]):
         raise _field_error(
             "allocated_hours", f"The milestones already plan {planned['hours']:g} hours, more than {fields['allocated_hours']:g}"
         )
-    if "budget_amount" in fields and planned["budget"] > fields["budget_amount"]:
+    if "budget_amount" in fields and not fits(planned["budget"], fields["budget_amount"]):
         raise _field_error(
             "budget_amount", f"The milestones already budget {planned['budget']:,.2f}, more than {fields['budget_amount']:,.2f}"
         )

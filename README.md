@@ -8,6 +8,23 @@ solves a theoretical business problem.
 
 Navigate to [Coding Workshop - Main Guide](./docs/README.md) to get started.
 
+## This Repository's Solution: ACME Project Tracker
+
+A project-tracking system for ACME Inc.: which projects are healthy, which are at risk, and who is working on what,
+calculated from dates instead of timesheets. FastAPI on AWS Lambda, PostgreSQL, a React + TypeScript + MUI web app, Terraform.
+
+| Read this | For |
+|---|---|
+| [docs/DEMO.md](./docs/DEMO.md) | Run it on LocalStack and present it (accounts, script, recovery steps) |
+| [docs/TESTING.md](./docs/TESTING.md) | Every test command, results, coverage and known gaps |
+| [docs/CONTEXT.md](./docs/CONTEXT.md) | Requirements, decisions and trade-offs, what is done and what is not |
+| [backend/pm-api/README.md](./backend/pm-api/README.md) | The API: architecture, rules, endpoints, how to run and test it |
+| [frontend/README.md](./frontend/README.md) | The web app |
+| [docs/postman](./docs/postman/README.md) | The API collection: 138 requests with saved examples |
+
+Quick start (about 3 minutes the first time): `./bin/demo-postgres.sh && ./bin/start-dev.sh`, then `./bin/demo-ready.sh` in a
+second terminal, then open http://localhost:3000 and sign in as `admin1` / `Demo1234!`.
+
 ## Coding Workshop Example
 
 Coding workshop organizer(s) will provide instructions to follow by email. Here

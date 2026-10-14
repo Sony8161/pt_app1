@@ -1,6 +1,6 @@
 # Project context: ACME Project Tracker
 
-Everything a new session or teammate needs to pick this project up. Snapshot taken 2026-10-13.
+Everything a new session or teammate needs to pick this project up. Snapshot taken 2026-10-14.
 
 ## The problem
 ACME runs many projects across departments but cannot see status, resource allocation, deadlines or budget.
@@ -42,16 +42,18 @@ and their status, dependency between deliverables (milestones), and budget consu
 ## What exists
 | Area | State |
 |---|---|
-| `backend/pm-api` | Done: auth, users, projects, milestones, deliverables, milestone teams, costs, reports, demo-data. 142 tests, 96.7% coverage, no DELETE endpoints |
+| `backend/pm-api` | Done: auth, users, projects, milestones, deliverables, milestone teams, costs, reports, demo-data. 154 tests, 97.1% coverage, no DELETE endpoints |
 | `docs/postman` | Done: 138-request collection with saved example JSON, verified with Newman (554 assertions) |
-| `infra/`, `bin/` | Fixed for the app (auth header, CloudFront, Aurora, secrets); `terraform validate` passes; not applied |
-| LocalStack / AWS deploy | **Not done**: needs `sudo` to rebind Postgres, run `./bin/start-dev.sh` |
-| `frontend/` | **Not started** (still the Vite hello-world) |
+| `infra/`, `bin/` | Fixed for the app (auth header, CloudFront, Aurora, secrets); `terraform validate` passes; not applied to AWS |
+| LocalStack deploy | **Done**: `./bin/demo-postgres.sh` then `./bin/start-dev.sh`; Postman run passes there (138 requests, 554 assertions) |
+| AWS deploy | **Not done** (`./bin/deploy-backend.sh` and `./bin/deploy-frontend.sh`) |
+| `frontend/` | Demo-scale web app for all three roles (React, TypeScript, MUI), 253 tests at 99% coverage and a saved end-to-end test; see `frontend/README.md` for what is missing |
+| Demo | `docs/DEMO.md`: rehearsed script; `./bin/demo-ready.sh` loads the sample company with memorable logins |
 | CI workflow, backend README | Not written |
 
 ## Run it
 ```sh
-./bin/test-backend.sh                       # lint + security scan + 120 tests (needs local Postgres)
+./bin/test-backend.sh                       # lint + security scan + 154 tests (needs local Postgres)
 cd backend/pm-api && source .venv/bin/activate
 POSTGRES_NAME=pm_dev uvicorn app.main:app --port 8000   # then open http://localhost:8000/docs
 # first login: admin1 / ChangeMe123!  (you must change it); POST /admin/seed-demo loads sample data
@@ -64,7 +66,7 @@ npx newman run docs/postman/acme-pm-api.postman_collection.json -e docs/postman/
 - `pip` on the VDI belongs to Python 3.14 but Lambda runs 3.13; use `python3 -m pip` (fixed in `start-dev.sh`).
 - The old CloudFront rule turning every 404 into `index.html` would hide API errors (removed).
 - Root `.gitignore` ignores any directory named `lib`, `assets`, `build`, `dist`, `coverage`, `tmp`.
-- LocalStack Lambda reaches Postgres at `172.17.0.1`, so Postgres must listen on `0.0.0.0` (`start-dev.sh` does it).
+- LocalStack Lambda reaches Postgres at `172.17.0.1`. The system Postgres listens on `127.0.0.1` only and changing that needs sudo, so `./bin/demo-postgres.sh` runs a Docker Postgres on that address instead.
 
 ## Known limits
 - Labor cost uses today's salary for all worked days, so a raise reprices history (fix: store the rate per assignment).
@@ -74,6 +76,6 @@ npx newman run docs/postman/acme-pm-api.postman_collection.json -e docs/postman/
 - Aurora minimum capacity is 0.5 ACU (about $43 a month) so it never pauses.
 
 ## Next steps
-1. Deploy to LocalStack with `./bin/start-dev.sh`, then to AWS; re-run the Newman collection against each.
-2. Frontend (React + TypeScript + MUI) against the finished API.
+1. Deploy to AWS and check `/health` and a sign-in by hand. Run the Newman collection only against a throwaway stack: it changes the admin password and creates data that can never be deleted (LocalStack is done).
+2. Grow the demo frontend into the full app (profile editing, project editing, moving an employee between managers, TanStack Query, saved end-to-end tests).
 3. CI workflow (pytest, vitest), backend README, branches `develop`/`main`, release tag.

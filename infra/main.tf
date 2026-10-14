@@ -20,6 +20,11 @@ resource "random_pet" "this" {
 resource "random_password" "admin" {
   length  = 16
   special = false
+  # The API refuses a password without a lowercase letter, an uppercase letter and a digit, and then
+  # cannot create its first admin. Without these, about 1 deploy in 16 generates a digit-free password.
+  min_lower   = 1
+  min_upper   = 1
+  min_numeric = 1
 
   keepers = {
     seed_input = try(var.aws_app_code, terraform.workspace)

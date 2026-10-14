@@ -198,6 +198,27 @@ def test_admin_resets_password(api):
     assert api.client.post(f"/users/{employee.id}/reset-password", headers=boss.headers).status_code == 403
 
 
+def test_an_admin_cannot_reset_their_own_password(api):
+    refused = api.client.post(f"/users/{api.admin.id}/reset-password", headers=api.admin.headers)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "self_reset"
+    assert api.client.get("/auth/me", headers=api.admin.headers).status_code == 200  # still signed in, password intact
+
+
 def test_unknown_user_is_404(api, new_id):
     assert api.client.get(f"/users/{new_id()}", headers=api.admin.headers).status_code == 404
     assert api.client.get("/users/not-a-uuid", headers=api.admin.headers).status_code == 400
+
+
+def test_changing_an_employee_into_a_manager_ends_their_milestone_work(api, today):
+    from tests.test_team import url  # the team URL helper
+
+    manager = api.user("manager")
+    employee = api.user("employee", manager=manager)
+    project, ms = api.setup_work(manager, employee)
+    team_url = url(project, ms)
+    before = api.client.get(team_url, headers=manager.headers).json()["items"][0]
+    assert before["end_date"] == "2026-03-27"
+
+    api.client.patch(f"/users/{employee.id}", json={"role": "manager"}, headers=api.admin.headers)
+    after = api.client.get(team_url, headers=manager.headers).json()["items"][0]
+    assert after["end_date"] == "2026-03-11"  # stops today: no more 8-hour days of labor cost at the old rate

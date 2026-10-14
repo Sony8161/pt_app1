@@ -15,6 +15,7 @@ import psycopg
 from app.core import dates
 from app.core.deps import CurrentUser
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.money import fits
 from app.domains.assignments import repository as assignments_repo
 from app.domains.deliverables import repository as deliverables_repo
 from app.domains.milestones import repository as repo
@@ -127,13 +128,13 @@ def _check_plan(
 ) -> None:
     """The milestones' planned hours and budget must fit inside the project's."""
     others = repo.plan_totals(conn, project["id"], exclude_id=exclude)
-    if others["hours"] + hours > float(project["allocated_hours"]):
+    if not fits(others["hours"] + hours, float(project["allocated_hours"])):
         raise _field_error(
             "allocated_hours",
             f"The milestones would plan {others['hours'] + hours:g} hours but the project only has "
             f"{float(project['allocated_hours']):g}. Raise the project's allocated hours first.",
         )
-    if others["budget"] + budget > float(project["budget_amount"]):
+    if not fits(others["budget"] + budget, float(project["budget_amount"])):
         raise _field_error(
             "budget_amount",
             f"The milestones would budget {others['budget'] + budget:,.2f} but the project only has "

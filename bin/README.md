@@ -110,6 +110,19 @@ Starts the complete development environment with hot-reload.
 ./bin/start-dev.sh
 ```
 
+### `demo-postgres.sh`, `demo-ready.sh`, `demo-reset.sh`, `test-backend.sh`
+
+Added for the ACME Project Tracker demo and its checks (Linux only; the demo scripts need Docker).
+
+| Script | What it does |
+|---|---|
+| `demo-postgres.sh [--reset \| --stop]` | Runs PostgreSQL 17 in Docker on the bridge address `172.17.0.1:5432`, where the LocalStack Lambda container can reach it, so `start-dev.sh` needs no `sudo` and the system database is left alone |
+| `demo-ready.sh` | Empties the demo data, loads the sample company through the API, and sets short, memorable logins (see `docs/DEMO.md`). About 5 seconds |
+| `demo-reset.sh` | Empties all demo data (first admin only, `admin1` / `ChangeMe123!`). About 1 second |
+| `test-backend.sh [pytest args]` | Lint (ruff), security scan (bandit, tracked files only, like CI) and the backend tests with a coverage gate of 80% |
+
+The frontend has its own commands (`npm test`, `npm run test:coverage`, `npm run e2e`); see `frontend/README.md` and `docs/TESTING.md`.
+
 ### `generate-env.sh`
 
 Generates `.env.local` file for React frontend.

@@ -23,10 +23,16 @@ exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
 [tool.ruff]
 line-length = 130
 target-version = "py313"
+# Not ".": ./bin/start-dev.sh pip-installs the dependencies next to the code for LocalStack, and ruff would then
+# take fastapi, pydantic and the rest for first-party modules and re-sort imports.
+src = ["app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]
 ignore = ["B008"]  # FastAPI Depends() in defaults
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S105", "S106", "E501"]

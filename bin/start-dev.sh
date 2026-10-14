@@ -64,6 +64,11 @@ if pg_isready -q; then
     if ss -ltn 2>/dev/null | grep -q '0.0.0.0:5432'; then
         PG_OK=true
         echo -e "  ✓ PostgreSQL is running and bound to 0.0.0.0:5432"
+    elif pg_isready -q -h 172.17.0.1 -p 5432; then
+        # Reachable on the Docker bridge, which is all the LocalStack Lambda containers need
+        # (for example the container started by ./bin/demo-postgres.sh). No sudo required.
+        PG_OK=true
+        echo -e "  ✓ PostgreSQL is reachable from Docker containers at 172.17.0.1:5432"
     else
         echo -e "  ⚠ PostgreSQL running but not bound to 0.0.0.0, reconfiguring..."
     fi

@@ -1,0 +1,50 @@
+# Load test for the ACME Project Tracker API (Artillery). Read-only traffic, so it can run against the demo data.
+#
+#   ./bin/demo-ready.sh                       # the logins below exist after this
+#   npx artillery run docs/load/artillery.yml
+#   npx artillery run docs/load/artillery.yml -e aws --target https://<cloudfront>/api/pm-api   # only with your own test users
+#
+# One manager signs in once (bcrypt makes login deliberately slow, so it is not the thing under test); every virtual user
+# then reads the pages a manager opens most: the overview, the project list, one project and the people list.
+config:
+  target: "http://localhost:3001/api/pm-api"
+  # Default: what this tool really sees. 5 new users a second, each making 6 calls, is about 30 requests a second,
+  # far more than tens of employees and managers produce. The warm-up starts the Lambda containers.
+  phases:
+    - { name: "Warm up", duration: 20, arrivalRate: 1, rampTo: 3 }
+    - { name: "Hold", duration: 40, arrivalRate: 5 }
+  ensure:
+    thresholds:
+      - http.response_time.p95: 1500
+    maxErrorRate: 1
+  environments:
+    # Stress: find where it stops coping.  npx artillery run docs/load/artillery.yml -e stress
+    stress:
+      phases:
+        - { name: "Ramp up", duration: 30, arrivalRate: 2, rampTo: 15 }
+        - { name: "Hold", duration: 30, arrivalRate: 15 }
+  variables:
+    username: "maria1"
+    password: "Demo1234!"
+before:
+  flow:
+    - post:
+        url: "/auth/login"
+        json: { username: "{{ username }}", password: "{{ password }}" }
+        capture:
+          - { json: "$.access_token", as: "token" }
+    - get:
+        url: "/projects"
+        headers: { Authorization: "Bearer {{ token }}" }
+        capture:
+          - { json: "$.items[0].id", as: "projectId" }
+scenarios:
+  - name: "Manager reads"
+    flow:
+      - get: { url: "/reports/overview", headers: { Authorization: "Bearer {{ token }}" } }
+      - get: { url: "/projects", headers: { Authorization: "Bearer {{ token }}" } }
+      - get: { url: "/projects/{{ projectId }}", headers: { Authorization: "Bearer {{ token }}" } }
+      - get: { url: "/projects/{{ projectId }}/milestones", headers: { Authorization: "Bearer {{ token }}" } }
+      - get: { url: "/users", headers: { Authorization: "Bearer {{ token }}" } }
+      - think: 1
+      - get: { url: "/health" }

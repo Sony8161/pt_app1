@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.config import API_PREFIX, get_settings
 from app.core.errors import register_error_handlers
+from app.core.observability import RequestLogMiddleware, configure_logging
 from app.db import TransactionMiddleware, get_connection, register_post_migrate_hook
 from app.domains.admin.router import router as admin_router
 from app.domains.assignments.router import router as team_router
@@ -43,6 +44,7 @@ class RootPathMiddleware:
 
 def create_app() -> FastAPI:
     """Build the application: routers, error handlers, middleware, first-admin bootstrap."""
+    configure_logging()
     app = FastAPI(
         title="ACME Project Tracker API",
         version=__version__,
@@ -76,6 +78,7 @@ def create_app() -> FastAPI:
     # Middleware added last runs first: the root path is fixed before the transaction starts.
     app.add_middleware(TransactionMiddleware)
     app.add_middleware(RootPathMiddleware)
+    app.add_middleware(RequestLogMiddleware)  # outermost: times everything, including the commit
     register_post_migrate_hook(ensure_bootstrap_admin)
     return app
 

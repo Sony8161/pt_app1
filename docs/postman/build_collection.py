@@ -730,6 +730,12 @@ def build_collection(recorded: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+# The collection changes the admin password and creates users and projects that can never be deleted, so it must not be
+# run against a real stack. This value has no digit, so the API refuses it: an unedited AWS environment cannot change
+# the admin password to a value that is public in this repository.
+AWS_PLACEHOLDER = "CHANGE-ME-before-running"
+
+
 def build_environment(name: str, base_url: str) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"acme-pm-api-env-{name}")), "name": f"ACME PM API - {name}",
@@ -738,7 +744,7 @@ def build_environment(name: str, base_url: str) -> dict[str, Any]:
             {"key": "initial_admin_username", "value": INITIAL_ADMIN, "type": "default", "enabled": True},
             {"key": "initial_admin_password", "value": INITIAL_PASSWORD if name != "aws" else "<terraform output -raw bootstrap_admin_password>",
              "type": "secret", "enabled": True},
-            {"key": "new_password", "value": NEW_PASSWORD, "type": "secret", "enabled": True},
+            {"key": "new_password", "value": AWS_PLACEHOLDER if name == "aws" else NEW_PASSWORD, "type": "secret", "enabled": True},
         ],
         "_postman_variable_scope": "environment",
     }
